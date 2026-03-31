@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: email_intel
+      POSTGRES_USER: email_intel
+      POSTGRES_PASSWORD: email_intel
+    ports:
+      - "5432:5432"
+    volumes:
+      - email_intel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U email_intel -d email_intel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://email_intel:email_intel@db:5432/email_intel
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://email_intel:email_intel@db:5432/email_intel
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  email_intel_pgdata:
