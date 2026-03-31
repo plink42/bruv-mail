@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from db.session import Base
+from security.crypto import decrypt_secret, encrypt_secret
 
 class IMAPAccount(Base):
     __tablename__ = "imap_accounts"
@@ -18,6 +19,12 @@ class IMAPAccount(Base):
     __table_args__ = (
         UniqueConstraint("host", "username", name="uq_imap_accounts_host_username"),
     )
+
+    def set_password(self, plain_password: str) -> None:
+        self.password = encrypt_secret(plain_password)
+
+    def get_password(self) -> str:
+        return decrypt_secret(self.password)
 
 class EmailMessage(Base):
     __tablename__ = "email_messages"

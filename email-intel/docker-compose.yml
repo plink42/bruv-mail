@@ -21,6 +21,7 @@ services:
       dockerfile: docker/api.Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg2://email_intel:email_intel@db:5432/email_intel
+      APP_ENCRYPTION_KEY: U0v0f39S4f8z63E0k5KwxY5Hn2o-Egz0Dg8FG_DVK40=
     ports:
       - "8000:8000"
     depends_on:
@@ -33,6 +34,7 @@ services:
       dockerfile: docker/worker.Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg2://email_intel:email_intel@db:5432/email_intel
+      APP_ENCRYPTION_KEY: U0v0f39S4f8z63E0k5KwxY5Hn2o-Egz0Dg8FG_DVK40=
     depends_on:
       db:
         condition: service_healthy

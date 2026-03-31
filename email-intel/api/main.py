@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.models import EmailMessage, IMAPAccount, Task
-from db.session import Base, engine, get_db
+from db.session import get_db
 
 router = APIRouter()
 
@@ -127,8 +127,9 @@ def add_account(account: IMAPAccountCreate, db: Session = Depends(get_db)):
     db_account = IMAPAccount(
         host=account.host,
         username=account.username,
-        password=account.password,
+        password="",
     )
+    db_account.set_password(account.password)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
@@ -193,11 +194,6 @@ def update_task_status(id: int, payload: TaskStatusUpdate, db: Session = Depends
 
 
 app = FastAPI(title="email-intel")
-
-
-@app.on_event("startup")
-def on_startup():
-    Base.metadata.create_all(bind=engine)
 
 
 app.include_router(router)

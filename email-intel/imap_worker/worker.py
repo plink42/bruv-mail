@@ -10,74 +10,78 @@ from db.models import EmailMessage, IMAPAccount, Task
 
 POLL_INTERVAL = 60  # seconds
 
-def run_worker():
-    while True:
-        with get_session() as db:
-            accounts = db.query(IMAPAccount).all()
+def process_accounts_once() -> None:
+    with get_session() as db:
+        accounts = db.query(IMAPAccount).all()
 
-            for account in accounts:
-                client = IMAPClient(account)
-                new_messages = client.fetch_new()
-                max_uid_seen = account.last_uid or 0
+        for account in accounts:
+            client = IMAPClient(account)
+            new_messages = client.fetch_new()
+            max_uid_seen = account.last_uid or 0
 
-                for uid, raw_msg in new_messages:
-                    parsed = parse_email(raw_msg)
-                    if not parsed.message_id:
-                        continue
+            for uid, raw_msg in new_messages:
+                parsed = parse_email(raw_msg)
+                if not parsed.message_id:
+                    continue
 
-                    existing = (
-                        db.query(EmailMessage)
-                        .filter(
-                            EmailMessage.account_id == account.id,
-                            EmailMessage.message_id == parsed.message_id,
-                        )
+                existing = (
+                    db.query(EmailMessage)
+                    .filter(
+                        EmailMessage.account_id == account.id,
+                        EmailMessage.message_id == parsed.message_id,
+                    )
+                    .first()
+                )
+                if existing:
+                    max_uid_seen = max(max_uid_seen, uid)
+                    continue
+
+                tags = classify_email(parsed)
+
+                email = EmailMessage(
+                    account_id=account.id,
+                    message_id=parsed.message_id,
+                    subject=parsed.subject,
+                    from_addr=parsed.from_addr,
+                    to_addrs=parsed.to_addrs,
+                    date=parsed.date,
+                    body_text=parsed.body_text,
+                    body_html=parsed.body_html,
+                    raw=raw_msg.decode("utf-8", errors="replace"),
+                    tags=json.dumps(tags),
+                )
+                db.add(email)
+                db.flush()
+
+                extracted_tasks = extract_tasks(parsed)
+                for task in extracted_tasks:
+                    existing_task = (
+                        db.query(Task)
+                        .filter(Task.email_id == email.id, Task.title == task.title)
                         .first()
                     )
-                    if existing:
-                        max_uid_seen = max(max_uid_seen, uid)
+                    if existing_task:
                         continue
 
-                    tags = classify_email(parsed)
-
-                    email = EmailMessage(
-                        account_id=account.id,
-                        message_id=parsed.message_id,
-                        subject=parsed.subject,
-                        from_addr=parsed.from_addr,
-                        to_addrs=parsed.to_addrs,
-                        date=parsed.date,
-                        body_text=parsed.body_text,
-                        body_html=parsed.body_html,
-                        raw=raw_msg.decode("utf-8", errors="replace"),
-                        tags=json.dumps(tags),
+                    db.add(
+                        Task(
+                            email_id=email.id,
+                            title=task.title,
+                            due_date=task.due_date,
+                            status="open",
+                            confidence=task.confidence,
+                        )
                     )
-                    db.add(email)
-                    db.flush()
 
-                    extracted_tasks = extract_tasks(parsed)
-                    for task in extracted_tasks:
-                        existing_task = (
-                            db.query(Task)
-                            .filter(Task.email_id == email.id, Task.title == task.title)
-                            .first()
-                        )
-                        if existing_task:
-                            continue
+                max_uid_seen = max(max_uid_seen, uid)
 
-                        db.add(
-                            Task(
-                                email_id=email.id,
-                                title=task.title,
-                                due_date=task.due_date,
-                                status="open",
-                                confidence=task.confidence,
-                            )
-                        )
+            account.last_uid = max_uid_seen
 
-                    max_uid_seen = max(max_uid_seen, uid)
+        db.commit()
 
-                account.last_uid = max_uid_seen
 
-            db.commit()
+def run_worker():
+    while True:
+        process_accounts_once()
 
         time.sleep(POLL_INTERVAL)

@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 
 @dataclass
@@ -35,7 +35,7 @@ def extract_tasks(parsed) -> list[ExtractedTask]:
     if not any(phrase in lowered for phrase in trigger_phrases):
         return []
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     due_date = _derive_due_date(combined_text, now)
     title = (parsed.subject or "Untitled task").strip()[:180]
 

@@ -5,7 +5,7 @@ class IMAPClient:
     def __init__(self, account):
         self.host = account.host
         self.username = account.username
-        self.password = account.password
+        self.password = account.get_password()
         self.last_uid = account.last_uid
 
     def fetch_new(self):

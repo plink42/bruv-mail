@@ -13,6 +13,8 @@ The repository now includes a working Phase 1 + Phase 2 baseline for `email-inte
 - Basic rule-based email tagging.
 - Basic task extraction from email content.
 - Message filtering and pagination in the API.
+- Alembic migrations for schema versioning.
+- Encrypted credential storage for IMAP passwords.
 
 ## Quick Start
 
@@ -44,6 +46,29 @@ Set `DATABASE_URL` to override, for example:
 ```bash
 export DATABASE_URL="sqlite:///./email_intel.db"
 ```
+
+Set `APP_ENCRYPTION_KEY` to control credential encryption (must be a urlsafe base64 Fernet key):
+
+```bash
+export APP_ENCRYPTION_KEY="replace-with-your-fernet-key"
+```
+
+Generate a valid key:
+
+```bash
+/home/benr/repos/bruv-mail/venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+## Migrations
+
+Run migrations manually:
+
+```bash
+cd email-intel
+/home/benr/repos/bruv-mail/venv/bin/python -m alembic upgrade head
+```
+
+`run_api.py` and `run_worker.py` automatically run `alembic upgrade head` before starting.
 
 ## API Endpoints
 
@@ -81,3 +106,12 @@ docker compose -f email-intel/docker-compose.yml up --build
 ```
 
 Then use the API at `http://localhost:8000`.
+
+## Tests
+
+Run integration tests:
+
+```bash
+cd email-intel
+/home/benr/repos/bruv-mail/venv/bin/python -m pytest -q
+```
