@@ -72,3 +72,20 @@ class Task(Base):
     )
 
     email: Mapped[EmailMessage] = relationship("EmailMessage", back_populates="tasks")
+
+
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)  # 'env' or 'runtime'
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    note: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+
+    __table_args__ = (
+        Index("ix_auth_tokens_expires_at", "expires_at"),
+        Index("ix_auth_tokens_is_revoked", "is_revoked"),
+    )
