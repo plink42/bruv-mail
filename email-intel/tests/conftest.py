@@ -24,6 +24,9 @@ def db_file():
 def configured_db(db_file):
     db_url = f"sqlite:///{db_file}"
     os.environ["DATABASE_URL"] = db_url
+    os.environ["APP_ENCRYPTION_KEY"] = "JfYf-yjvUN0p5XQH6Bbfazf2QmiVjCwXTlzAIXazhM4="
+    os.environ["API_AUTH_TOKEN"] = "test-token"
+    os.environ["API_AUTH_TOKENS"] = "test-token,rotated-token"
     db_session.DATABASE_URL = db_url
     db_session.connect_args = {"check_same_thread": False}
     db_session.engine = db_session.create_engine(db_url, connect_args=db_session.connect_args)

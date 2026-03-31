@@ -6,6 +6,13 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from api.auth import (
+    create_or_rotate_runtime_token,
+    list_token_metadata,
+    require_admin_key,
+    require_api_key,
+    revoke_runtime_token,
+)
 from db.models import EmailMessage, IMAPAccount, Task
 from db.session import get_db
 
@@ -16,10 +23,27 @@ class IMAPAccountCreate(BaseModel):
     host: str
     username: str
     password: str
+    display_name: str | None = None
+
+
+class IMAPAccountUpdate(BaseModel):
+    display_name: str | None = None
+    is_active: bool | None = None
 
 
 class TaskStatusUpdate(BaseModel):
     status: Literal["open", "done", "dismissed"]
+
+
+class TokenRotateRequest(BaseModel):
+    token: str | None = None
+    ttl_minutes: int | None = None
+    expires_at: datetime | None = None
+    note: str | None = None
+
+
+class TokenRevokeRequest(BaseModel):
+    token: str
 
 
 def _parse_tags(raw_tags: str | None) -> list[str]:
@@ -75,6 +99,7 @@ def list_messages(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    _: None = Depends(require_api_key),
 ):
     q = db.query(EmailMessage)
     if tag:
@@ -98,14 +123,14 @@ def list_messages(
     }
 
 @router.get("/messages/{id}")
-def get_message(id: int, db: Session = Depends(get_db)):
+def get_message(id: int, db: Session = Depends(get_db), _: None = Depends(require_api_key)):
     message = db.query(EmailMessage).filter(EmailMessage.id == id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     return _serialize_message(message)
 
 @router.get("/tags")
-def list_tags(db: Session = Depends(get_db)):
+def list_tags(db: Session = Depends(get_db), _: None = Depends(require_api_key)):
     counts: dict[str, int] = {}
     messages = db.query(EmailMessage.tags).all()
     for (raw_tags,) in messages:
@@ -115,7 +140,7 @@ def list_tags(db: Session = Depends(get_db)):
     return [{"tag": k, "count": v} for k, v in sorted(counts.items(), key=lambda i: i[0])]
 
 @router.post("/accounts")
-def add_account(account: IMAPAccountCreate, db: Session = Depends(get_db)):
+def add_account(account: IMAPAccountCreate, db: Session = Depends(get_db), _: None = Depends(require_api_key)):
     existing = (
         db.query(IMAPAccount)
         .filter(IMAPAccount.host == account.host, IMAPAccount.username == account.username)
@@ -128,6 +153,7 @@ def add_account(account: IMAPAccountCreate, db: Session = Depends(get_db)):
         host=account.host,
         username=account.username,
         password="",
+        display_name=account.display_name,
     )
     db_account.set_password(account.password)
     db.add(db_account)
@@ -137,22 +163,56 @@ def add_account(account: IMAPAccountCreate, db: Session = Depends(get_db)):
         "id": db_account.id,
         "host": db_account.host,
         "username": db_account.username,
+        "display_name": db_account.display_name,
+        "is_active": db_account.is_active,
         "last_uid": db_account.last_uid,
     }
 
 
 @router.get("/accounts")
-def list_accounts(db: Session = Depends(get_db)):
+def list_accounts(db: Session = Depends(get_db), _: None = Depends(require_api_key)):
     accounts = db.query(IMAPAccount).order_by(IMAPAccount.id.asc()).all()
     return [
         {
             "id": account.id,
             "host": account.host,
             "username": account.username,
+            "display_name": account.display_name,
+            "is_active": account.is_active,
             "last_uid": account.last_uid,
+            "created_at": account.created_at,
         }
         for account in accounts
     ]
+
+
+@router.patch("/accounts/{id}")
+def update_account(
+    id: int,
+    payload: IMAPAccountUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_key),
+):
+    account = db.query(IMAPAccount).filter(IMAPAccount.id == id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    if payload.display_name is not None:
+        account.display_name = payload.display_name
+    if payload.is_active is not None:
+        account.is_active = payload.is_active
+
+    db.commit()
+    db.refresh(account)
+    return {
+        "id": account.id,
+        "host": account.host,
+        "username": account.username,
+        "display_name": account.display_name,
+        "is_active": account.is_active,
+        "last_uid": account.last_uid,
+        "created_at": account.created_at,
+    }
 
 @router.get("/tasks")
 def list_tasks(
@@ -162,6 +222,7 @@ def list_tasks(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    _: None = Depends(require_api_key),
 ):
     q = db.query(Task)
     if status is not None:
@@ -182,7 +243,12 @@ def list_tasks(
 
 
 @router.patch("/tasks/{id}")
-def update_task_status(id: int, payload: TaskStatusUpdate, db: Session = Depends(get_db)):
+def update_task_status(
+    id: int,
+    payload: TaskStatusUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_key),
+):
     task = db.query(Task).filter(Task.id == id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -191,6 +257,37 @@ def update_task_status(id: int, payload: TaskStatusUpdate, db: Session = Depends
     db.commit()
     db.refresh(task)
     return _serialize_task(task)
+
+
+@router.get("/auth/tokens")
+def list_auth_tokens(_: None = Depends(require_admin_key)):
+    return {"items": list_token_metadata()}
+
+
+@router.post("/auth/tokens")
+def rotate_auth_token(payload: TokenRotateRequest, _: None = Depends(require_admin_key)):
+    try:
+        token, metadata = create_or_rotate_runtime_token(
+            token=payload.token,
+            ttl_minutes=payload.ttl_minutes,
+            expires_at=payload.expires_at,
+            note=payload.note,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "token": token,
+        "metadata": metadata,
+    }
+
+
+@router.post("/auth/tokens/revoke")
+def revoke_auth_token(payload: TokenRevokeRequest, _: None = Depends(require_admin_key)):
+    revoked = revoke_runtime_token(payload.token)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Runtime token not found")
+    return {"revoked": True}
 
 
 app = FastAPI(title="email-intel")

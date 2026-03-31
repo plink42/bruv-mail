@@ -22,6 +22,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://email_intel:email_intel@db:5432/email_intel
       APP_ENCRYPTION_KEY: U0v0f39S4f8z63E0k5KwxY5Hn2o-Egz0Dg8FG_DVK40=
+      API_AUTH_TOKEN: dev-local-token
+      API_AUTH_TOKENS: dev-local-token,dev-next-token
+      API_ADMIN_TOKEN: dev-admin-token
+      API_ADMIN_TOKENS: dev-admin-token,dev-admin-next-token
     ports:
       - "8000:8000"
     depends_on:

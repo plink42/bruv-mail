@@ -1,24 +1,21 @@
-import base64
-import hashlib
 import os
 
 from cryptography.fernet import Fernet
 
 
-def _derive_dev_key() -> bytes:
-    digest = hashlib.sha256(b"email-intel-dev-key-change-me").digest()
-    return base64.urlsafe_b64encode(digest)
-
-
 def _get_key() -> bytes:
     configured = os.getenv("APP_ENCRYPTION_KEY")
-    if configured:
-        return configured.encode("utf-8")
-    return _derive_dev_key()
+    if not configured:
+        raise RuntimeError("APP_ENCRYPTION_KEY is required")
+    return configured.encode("utf-8")
 
 
 def _get_fernet() -> Fernet:
-    return Fernet(_get_key())
+    key = _get_key()
+    try:
+        return Fernet(key)
+    except Exception as exc:
+        raise RuntimeError("APP_ENCRYPTION_KEY is invalid") from exc
 
 
 def encrypt_secret(value: str) -> str:

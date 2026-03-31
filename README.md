@@ -47,6 +47,32 @@ Set `DATABASE_URL` to override, for example:
 export DATABASE_URL="sqlite:///./email_intel.db"
 ```
 
+Set required app secrets before running API/worker:
+
+```bash
+export APP_ENCRYPTION_KEY="replace-with-fernet-key"
+export API_AUTH_TOKEN="replace-with-api-token"
+export API_ADMIN_TOKEN="replace-with-admin-token"
+```
+
+For token rotation, you can provide multiple valid tokens:
+
+```bash
+export API_AUTH_TOKENS="token-old,token-new"
+```
+
+Optional dedicated admin token set:
+
+```bash
+export API_ADMIN_TOKENS="admin-token-current,admin-token-next"
+```
+
+Generate a Fernet key:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
 Set `APP_ENCRYPTION_KEY` to control credential encryption (must be a urlsafe base64 Fernet key):
 
 ```bash
@@ -75,11 +101,28 @@ cd email-intel
 - `GET /health`
 - `POST /accounts`
 - `GET /accounts`
+- `PATCH /accounts/{id}` with body `{"display_name":"Inbox","is_active":true}`
 - `GET /messages?tag=<tag>&account_id=<id>&from_addr=<text>&date_from=<iso>&date_to=<iso>&limit=50&offset=0`
 - `GET /messages/{id}`
 - `GET /tags`
 - `GET /tasks?status=open|done|dismissed&due_before=<iso>&due_after=<iso>&limit=50&offset=0`
 - `PATCH /tasks/{id}` with body `{"status":"open|done|dismissed"}`
+
+All endpoints except `GET /health` require header:
+
+- `X-API-Key: <API_AUTH_TOKEN>`
+
+If `API_AUTH_TOKENS` is set, any listed token in the comma-separated value is accepted.
+
+If `API_ADMIN_TOKEN` / `API_ADMIN_TOKENS` is unset, admin endpoints fall back to API auth tokens.
+
+Admin token management endpoints:
+
+- `GET /auth/tokens`
+- `POST /auth/tokens` with body `{"token":"optional-explicit-token","ttl_minutes":60,"expires_at":"optional-iso","note":"optional"}`
+- `POST /auth/tokens/revoke` with body `{"token":"runtime-token-to-revoke"}`
+
+`POST /auth/tokens` returns the raw token exactly once in response so clients can store it safely.
 
 ## Task Extraction Rules (Current MVP)
 

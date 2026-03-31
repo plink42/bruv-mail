@@ -12,7 +12,7 @@ POLL_INTERVAL = 60  # seconds
 
 def process_accounts_once() -> None:
     with get_session() as db:
-        accounts = db.query(IMAPAccount).all()
+        accounts = db.query(IMAPAccount).filter(IMAPAccount.is_active.is_(True)).all()
 
         for account in accounts:
             client = IMAPClient(account)
