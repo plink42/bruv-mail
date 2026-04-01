@@ -2,6 +2,10 @@
 
 An ADHD compatible mailbox system.
 
+## Deployment
+
+For a full deployment runbook (local, Docker, production notes, migrations, backups, troubleshooting), see [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Current Status
 
 The repository now includes a working Phase 1 + Phase 2 baseline for `email-intel`:
@@ -158,3 +162,51 @@ Run integration tests:
 cd email-intel
 /home/benr/repos/bruv-mail/venv/bin/python -m pytest -q
 ```
+
+## Frontend (Phase 1: React Inbox)
+
+A React TypeScript SPA with Vite, TanStack Query, Tailwind CSS.
+
+Current features:
+- Login with API token
+- Inbox view with message list and pagination
+- Tag filtering
+- Tag aggregation sidebar
+
+### Quick Start (Local)
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Frontend runs at `http://localhost:5173`. API proxy routes to `http://localhost:8000`.
+
+### Building
+
+```bash
+npm run build
+npm run preview
+```
+
+## Full Stack: Docker Compose (API + Worker + Frontend + Postgres)
+
+Create `.env` at repo root with required secrets:
+
+```bash
+APP_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+API_AUTH_TOKEN="your-api-token"
+API_ADMIN_TOKEN="your-admin-token"
+```
+
+Start full stack with a root `docker-compose.yml` that includes db, api, worker, and frontend services:
+
+```bash
+docker compose up --build
+```
+
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:8000`
+- Postgres: `localhost:5432`
